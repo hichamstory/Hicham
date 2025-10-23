@@ -1,0 +1,55 @@
+# .github/workflows/main.yml
+name: VPS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  secure-vps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Install & Configure SSH
+        run: |
+          sudo apt update -y
+          sudo apt install -y openssh-server
+          sudo systemctl enable ssh
+          sudo systemctl start ssh
+
+          # Allow password login (be careful: insecure on public servers)
+          echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config
+          echo "PasswordAuthentication yes" | sudo tee -a /etc/ssh/sshd_config
+          sudo systemctl restart ssh
+
+          # Set root password (use secrets in real workflows)
+          echo "root:admin#123" | sudo chpasswd
+
+          echo "✅ SSH user: root | pass: admin#123"
+
+      - name: Install Tailscale
+        run: |
+          # تنزيل وتثبيت tailscale ثم تشغيله مع مفتاح المصادقة من أسرار GitHub
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname="$(hostname)-github-action" || true
+
+          # طباعة معلومات IP/Tailscale لتخزينها أو رؤيتها في السجل
+          tailscale ip -4 || true
+          echo "TAILSCALE_IP=$(tailscale ip -4 | head -n 1)" >> $GITHUB_ENV
+          echo "✅ Tailscale IP: ${{ env.TAILSCALE_IP }}"
+
+      - name: Verify SSH Access
+        run: |
+          echo "Tailscale VPS ready!"
+          echo "IP: ${{ env.TAILSCALE_IP }}"
+          echo "User: root"
+          echo "Pass: admin#123"
+
+      - name: Keep VPS Alive
+        run: |
+          # حلقة بسيطة تظل تعمل لتمنع انتهاء تنفيذ الـ job (مثال تعليمي)
+          while true; do
+            echo "$(date) VPS running..."
+            sleep 300
+          done
+          
